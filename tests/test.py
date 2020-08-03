@@ -128,6 +128,16 @@ class TestInputs(TestBase):
         self.assertTrue(self._output_path_exists('nest/test_deep.py'))
         self.assertTrue(self._output_path_exists('nest/more/test_why.py'))
 
+    def test_other_languages(self):
+        subprocess.call([
+            'mkcodes', '--output', 'tests/output/test_{name}.py', '--github',
+            'tests/langdata'])
+        self.assertTrue(self._output_path_exists('test_java.java'))
+        self.assertTrue(self._output_path_exists('test_csharp.cs'))
+        self.assertTrue(self._output_path_exists('test_multilang.cs'))
+        self.assertTrue(self._output_path_exists('test_multilang.java'))
+        self.assertTrue(self._output_path_exists('test_multilang.py'))
+
     @unittest.skip
     def test_glob(self):
         raise NotImplementedError
