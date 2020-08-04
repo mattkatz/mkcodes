@@ -55,7 +55,7 @@ for ext, lang_strings in ext_map.items():
 
 
 def github_codeblocks(filepath, safe, default_lang='py'):
-    codeblocks = []
+    codeblocks = {}
     codeblock_re = r'^```.*'
     codeblock_open_re = r'^```(`*)(py|python){0}$'.format('' if safe else '?')
 
@@ -73,7 +73,11 @@ def github_codeblocks(filepath, safe, default_lang='py'):
                     # we are closing a codeblock
                     if language:
                         # finished a codeblock, append everything
-                        codeblocks.append(''.join(block))
+                        # codeblocks.append(''.join(block))
+                        # import pudb; pu.db
+                        blocks = codeblocks.get(language, [])
+                        blocks.append(''.join(block))
+                        codeblocks[language] = blocks
 
                     block = []
                     if safe:
@@ -100,14 +104,14 @@ def github_codeblocks(filepath, safe, default_lang='py'):
 
 def github_markdown_codeblocks(filepath, safe, default_lang='py'):
     import markdown
-    codeblocks =[]
+    codeblocks = {}
     if safe:
         warnings.warn("'safe' option not available in 'github-markdown' mode.")
 
     class DoctestCollector(Treeprocessor):
         def run(self, root):
             nonlocal codeblocks
-            codeblocks = (block.text for block in root.iterfind('./pre/code'))
+            codeblocks[default_lang] = (block.text for block in root.iterfind('./pre/code'))
 
     class DoctestExtension(Extension):
         def extendMarkdown(self, md, md_globals):
@@ -121,10 +125,10 @@ def github_markdown_codeblocks(filepath, safe, default_lang='py'):
 
 
 
-def markdown_codeblocks(filepath, safe):
+def markdown_codeblocks(filepath, safe, default_lang='py'):
     import markdown
 
-    codeblocks = []
+    codeblocks = {}
 
     if safe:
         warnings.warn("'safe' option not available in 'markdown' mode.")
@@ -132,7 +136,7 @@ def markdown_codeblocks(filepath, safe):
     class DoctestCollector(Treeprocessor):
         def run(self, root):
             nonlocal codeblocks
-            codeblocks = (block.text for block in root.iterfind('./pre/code'))
+            codeblocks[default_lang] = (block.text for block in root.iterfind('./pre/code'))
 
     class DoctestExtension(Extension):
         def extendMarkdown(self, md, md_globals):
@@ -163,12 +167,14 @@ def get_files(inputs):
 @click.command()
 @click.argument(
     'inputs', nargs=-1, required=True, type=click.Path(exists=True))
-@click.option('--output', default='{name}.py')
+@click.option('--output', default='{name}.{ext}')
 @click.option('--github/--markdown', default=bool(not markdown_enabled),
               help='Github-flavored fence blocks or pure markdown.')
 @click.option('--safe/--unsafe', default=True,
               help='Allow code blocks without language hints.')
-def main(inputs, output, github, safe):
+@click.option('--default_lang', default='py',
+              help='Assumed language for code blocks without language hits.')
+def main(inputs, output, github, safe, default_lang):
     collect_codeblocks = github_codeblocks if github else markdown_codeblocks
     # collect_codeblocks = github_codeblocks if github else github_markdown_codeblocks
     # collect_codeblocks = github_markdown_codeblocks if github else markdown_codeblocks
@@ -177,7 +183,7 @@ def main(inputs, output, github, safe):
     outputbasename = Path(output).name
 
     for filepath, input_path in get_files(inputs):
-        codeblocks = collect_codeblocks(filepath, safe)
+        codeblocks = collect_codeblocks(filepath, safe, default_lang)
 
         if codeblocks:
             #we want the path to the file, and the file without an extension
@@ -187,9 +193,10 @@ def main(inputs, output, github, safe):
 
             # stitch together the OUTPUT base directory with the input directories
             # add the file format at the end.
-            outputfilename = outputbasedir / filedir / outputbasename.format(name=filename)
+            for lang, blocks in codeblocks.items():
+                outputfilename = outputbasedir / filedir / outputbasename.format(name=filename, ext=lang)
 
-            # make sure path exists, don't care if it already does
-            outputfilename.parent.mkdir(parents=True, exist_ok=True)
-            outputfilename.write_text('\n\n'.join(codeblocks))
+                # make sure path exists, don't care if it already does
+                outputfilename.parent.mkdir(parents=True, exist_ok=True)
+                outputfilename.write_text('\n\n'.join(blocks))
 
